@@ -227,7 +227,7 @@ app.post('/invoices/:id/payments',auth,(req,res)=>{
 
  // Expenses and cashflow
  const expenseSchema=z.object({
-  expense_date:z.string().regex(/^\\d{4}-\\d{2}-\\d{2}$/),
+  expense_date:z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   category:z.string().trim().min(2).max(80),
   description:z.string().trim().min(2).max(300),
   amount:z.coerce.number().int().positive()
@@ -279,10 +279,10 @@ app.post('/invoices/:id/payments',auth,(req,res)=>{
    ORDER BY date
   `).all(String(year),String(year));
   const cell=v=>'"'+String(v??'').replace(/"/g,'""').replace(/^[=+@-]/,'')+'"';
-  const csv=['Tanggal,Jenis,Kategori,Nominal,Catatan',...rows.map(r=>[r.date,r.type,r.category,r.amount,r.notes].map(cell).join(','))].join('\\r\\n');
+  const csv=['Tanggal,Jenis,Kategori,Nominal,Catatan',...rows.map(r=>[r.date,r.type,r.category,r.amount,r.notes].map(cell).join(','))].join('\r\n');
   res.setHeader('Content-Type','text/csv; charset=utf-8');
   res.setHeader('Content-Disposition','attachment; filename="ff-billing-laporan-'+year+'.csv"');
-  res.send('\\uFEFF'+csv);
+  res.send('\uFEFF'+csv);
  });
 
  // User administration
