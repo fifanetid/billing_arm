@@ -2,7 +2,7 @@ require('dotenv').config();
 const path=require('node:path');
 const config={
   env:process.env.NODE_ENV||'development',
-  port:Number(process.env.PORT||3000),
+  port:Number(process.env.PORT||1000),
   sessionSecret:process.env.SESSION_SECRET||'',
   databasePath:path.resolve(process.env.DATABASE_PATH||'./data/billing.sqlite'),
   adminUsername:process.env.ADMIN_USERNAME||'admin',
