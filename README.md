@@ -12,6 +12,10 @@ Proyek ini merupakan implementasi independen berdasarkan kelompok fitur yang did
 - Penetapan langganan pelanggan ke paket
 - Generate invoice bulanan, harga promo berdasarkan siklus promo, pembayaran parsial/penuh manual
 - Dashboard ringkasan pelanggan, tagihan, dan pembayaran
+- Pencatatan pengeluaran operasional dan laporan pemasukan/pengeluaran per tahun dengan ekspor CSV
+- Manajemen akun staf dengan peran admin/operator/finance/technician
+- Pembatasan akses modul keuangan dan administrasi pengguna berdasarkan peran
+- Audit log untuk aktivitas penting
 - Koneksi REST GenieACS untuk membaca daftar perangkat (read-only)
 - Tampilan responsif untuk desktop dan perangkat mobile
 
