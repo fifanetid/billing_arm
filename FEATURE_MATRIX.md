@@ -15,6 +15,10 @@ Status implementation as of the initial repository bootstrap.
 | Dashboard | Active customers, open invoices, outstanding amount, current-month collection |
 | GenieACS | NBI device list query, read-only |
 | Audit | Login attempts and main customer/package/subscription/invoice/payment events |
+| Expenses | Add and list operational expenses; admin can delete |
+| Financial reports | Monthly income/expense summary by year and CSV export |
+| Staff accounts | Admin creates/deactivates users with role assignment |
+| RBAC | Admin-only user/audit pages; finance/admin-only expenses and reports |
 
 ## Planned modules based on the reference feature catalogue
 | Module | Scope to implement |
