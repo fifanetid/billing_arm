@@ -1,0 +1,10 @@
+const fs=require('node:fs');
+const path=require('node:path');
+const Database=require('better-sqlite3');
+const config=require('../config');
+fs.mkdirSync(path.dirname(config.databasePath),{recursive:true});
+const db=new Database(config.databasePath);
+db.pragma('journal_mode = WAL');
+db.pragma('foreign_keys = ON');
+db.pragma('busy_timeout = 5000');
+module.exports=db;
