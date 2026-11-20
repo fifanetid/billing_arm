@@ -39,6 +39,13 @@ function auth(req,res,next){
  if(!req.session.user) return res.redirect('/login');
  next();
 }
+function allowRoles(...roles){
+ return (req,res,next)=>{
+  if(!req.session.user) return res.redirect('/login');
+  if(!roles.includes(req.session.user.role)) return res.status(403).send('Akses ditolak untuk peran akun ini.');
+  next();
+ };
+}
 function render(res,page,title,data={}){
  res.render('page',{page,title,...data});
 }
@@ -216,6 +223,103 @@ app.post('/invoices/:id/payments',auth,(req,res)=>{
  audit(req,'payment_recorded','invoices',Number(req.params.id),{amount,method});
  res.redirect('/invoices');
 });
+
+
+ // Expenses and cashflow
+ const expenseSchema=z.object({
+  expense_date:z.string().regex(/^\\d{4}-\\d{2}-\\d{2}$/),
+  category:z.string().trim().min(2).max(80),
+  description:z.string().trim().min(2).max(300),
+  amount:z.coerce.number().int().positive()
+ });
+ app.get('/expenses',auth,allowRoles('admin','finance'),(req,res)=>{
+  const expenses=db.prepare('SELECT e.*,u.username recorded_by_name FROM expenses e LEFT JOIN users u ON u.id=e.recorded_by ORDER BY e.expense_date DESC,e.id DESC LIMIT 500').all();
+  const total=db.prepare("SELECT COALESCE(SUM(amount),0) n FROM expenses WHERE substr(expense_date,1,7)=strftime('%Y-%m','now','localtime')").get().n;
+  render(res,'expenses','Pengeluaran',{expenses,total});
+ });
+ app.post('/expenses',auth,allowRoles('admin','finance'),(req,res)=>{
+  const p=expenseSchema.safeParse(req.body);
+  if(!p.success) return res.status(400).send('Data pengeluaran tidak valid: '+p.error.issues[0].message);
+  const d=p.data;
+  const result=db.prepare('INSERT INTO expenses(expense_date,category,description,amount,recorded_by) VALUES(?,?,?,?,?)')
+   .run(d.expense_date,d.category,d.description,d.amount,req.session.user.id);
+  audit(req,'expense_created','expenses',Number(result.lastInsertRowid),{amount:d.amount,category:d.category});
+  res.redirect('/expenses');
+ });
+ app.post('/expenses/:id/delete',auth,allowRoles('admin'),(req,res)=>{
+  const id=Number(req.params.id);
+  const row=db.prepare('SELECT id,amount,category FROM expenses WHERE id=?').get(id);
+  if(!row) return res.sendStatus(404);
+  db.prepare('DELETE FROM expenses WHERE id=?').run(id);
+  audit(req,'expense_deleted','expenses',id,{amount:row.amount,category:row.category});
+  res.redirect('/expenses');
+ });
+
+ // Financial reports
+ app.get('/reports',auth,allowRoles('admin','finance'),(req,res)=>{
+  const year=Number(req.query.year)||new Date().getFullYear();
+  if(!Number.isInteger(year)||year<2020||year>2100) return res.status(400).send('Tahun tidak valid.');
+  const months=db.prepare(`
+   WITH RECURSIVE m(n) AS (VALUES(1) UNION ALL SELECT n+1 FROM m WHERE n<12)
+   SELECT m.n month,
+    COALESCE((SELECT SUM(amount) FROM payments WHERE strftime('%Y',paid_at)=? AND CAST(strftime('%m',paid_at) AS INTEGER)=m.n),0) income,
+    COALESCE((SELECT SUM(amount) FROM expenses WHERE substr(expense_date,1,4)=? AND CAST(substr(expense_date,6,2) AS INTEGER)=m.n),0) expense
+   FROM m ORDER BY m.n
+  `).all(String(year),String(year));
+  const totals=months.reduce((a,m)=>({income:a.income+m.income,expense:a.expense+m.expense}),{income:0,expense:0});
+  render(res,'reports','Laporan keuangan',{year,months,totals});
+ });
+ app.get('/reports.csv',auth,allowRoles('admin','finance'),(req,res)=>{
+  const year=Number(req.query.year)||new Date().getFullYear();
+  if(!Number.isInteger(year)||year<2020||year>2100) return res.status(400).send('Tahun tidak valid.');
+  const rows=db.prepare(`
+   SELECT paid_at date,'Pemasukan' type,method category,amount,reference notes FROM payments WHERE strftime('%Y',paid_at)=?
+   UNION ALL
+   SELECT expense_date date,'Pengeluaran' type,category,amount,description notes FROM expenses WHERE substr(expense_date,1,4)=?
+   ORDER BY date
+  `).all(String(year),String(year));
+  const cell=v=>'"'+String(v??'').replace(/"/g,'""').replace(/^[=+@-]/,'')+'"';
+  const csv=['Tanggal,Jenis,Kategori,Nominal,Catatan',...rows.map(r=>[r.date,r.type,r.category,r.amount,r.notes].map(cell).join(','))].join('\\r\\n');
+  res.setHeader('Content-Type','text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition','attachment; filename="ff-billing-laporan-'+year+'.csv"');
+  res.send('\\uFEFF'+csv);
+ });
+
+ // User administration
+ const userSchema=z.object({
+  username:z.string().trim().min(3).max(40).regex(/^[a-zA-Z0-9._-]+$/),
+  password:z.string().min(10).max(200),
+  role:z.enum(['admin','operator','finance','technician'])
+ });
+ app.get('/users',auth,allowRoles('admin'),(req,res)=>{
+  const users=db.prepare('SELECT id,username,role,is_active,created_at FROM users ORDER BY id').all();
+  render(res,'users','Manajemen pengguna',{users,error:null});
+ });
+ app.post('/users',auth,allowRoles('admin'),(req,res)=>{
+  const p=userSchema.safeParse(req.body);
+  if(!p.success) return res.status(400).send('Data pengguna tidak valid: '+p.error.issues[0].message);
+  const d=p.data;
+  try{
+   const hash=bcrypt.hashSync(d.password,12);
+   const result=db.prepare('INSERT INTO users(username,password_hash,role) VALUES(?,?,?)').run(d.username,hash,d.role);
+   audit(req,'user_created','users',Number(result.lastInsertRowid),{username:d.username,role:d.role});
+   res.redirect('/users');
+  }catch(e){res.status(400).send(e.code==='SQLITE_CONSTRAINT_UNIQUE'?'Username sudah digunakan.':'Gagal membuat pengguna.');}
+ });
+ app.post('/users/:id/toggle',auth,allowRoles('admin'),(req,res)=>{
+  const id=Number(req.params.id);
+  if(id===req.session.user.id) return res.status(400).send('Tidak dapat menonaktifkan akun sendiri.');
+  const user=db.prepare('SELECT id,username,is_active FROM users WHERE id=?').get(id);
+  if(!user) return res.sendStatus(404);
+  db.prepare('UPDATE users SET is_active=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(user.is_active?0:1,id);
+  audit(req,'user_status_changed','users',id,{active:!user.is_active});
+  res.redirect('/users');
+ });
+
+ app.get('/audit-logs',auth,allowRoles('admin'),(req,res)=>{
+  const logs=db.prepare('SELECT a.*,u.username FROM audit_logs a LEFT JOIN users u ON u.id=a.user_id ORDER BY a.id DESC LIMIT 200').all();
+  render(res,'audit','Audit log',{logs});
+ });
 
 // GenieACS (read-only)
 app.get('/genieacs',auth,async(req,res)=>{
