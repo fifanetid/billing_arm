@@ -37,6 +37,12 @@ function audit(req,action,entity,id=null,details=null){
 }
 function auth(req,res,next){
  if(!req.session.user) return res.redirect('/login');
+ const fresh=db.prepare('SELECT id,username,role,is_active FROM users WHERE id=?').get(req.session.user.id);
+ if(!fresh||!fresh.is_active){
+  return req.session.destroy(()=>res.redirect('/login'));
+ }
+ req.session.user={id:fresh.id,username:fresh.username,role:fresh.role};
+ res.locals.currentUser=req.session.user;
  next();
 }
 function allowRoles(...roles){
@@ -97,12 +103,12 @@ app.get('/',auth,(req,res)=>{
 });
 
 // Customers
-app.get('/customers',auth,(req,res)=>{
+app.get('/customers',auth,allowRoles('admin','operator','technician'),(req,res)=>{
  const customers=db.prepare('SELECT * FROM customers ORDER BY id DESC').all();
  render(res,'customers','Pelanggan',{customers});
 });
-app.get('/customers/new',auth,(req,res)=>render(res,'customer-form','Tambah pelanggan',{customer:{},error:null}));
-app.post('/customers',auth,(req,res)=>{
+app.get('/customers/new',auth,allowRoles('admin','operator'),(req,res)=>render(res,'customer-form','Tambah pelanggan',{customer:{},error:null}));
+app.post('/customers',auth,allowRoles('admin','operator'),(req,res)=>{
  const p=customerSchema.safeParse(req.body);
  if(!p.success) return res.status(400).render('page',{page:'customer-form',title:'Tambah pelanggan',customer:req.body,error:p.error.issues[0].message});
  const d=p.data;
@@ -115,12 +121,12 @@ app.post('/customers',auth,(req,res)=>{
   res.status(400).render('page',{page:'customer-form',title:'Tambah pelanggan',customer:req.body,error:e.code==='SQLITE_CONSTRAINT_UNIQUE'?'Kode pelanggan atau PPPoE sudah digunakan.':'Gagal menyimpan pelanggan.'});
  }
 });
-app.get('/customers/:id/edit',auth,(req,res)=>{
+app.get('/customers/:id/edit',auth,allowRoles('admin','operator'),(req,res)=>{
  const customer=db.prepare('SELECT * FROM customers WHERE id=?').get(Number(req.params.id));
  if(!customer) return res.sendStatus(404);
  render(res,'customer-form','Edit pelanggan',{customer,error:null});
 });
-app.post('/customers/:id/update',auth,(req,res)=>{
+app.post('/customers/:id/update',auth,allowRoles('admin','operator'),(req,res)=>{
  const p=customerSchema.safeParse(req.body);
  if(!p.success) return res.status(400).render('page',{page:'customer-form',title:'Edit pelanggan',customer:{...req.body,id:req.params.id},error:p.error.issues[0].message});
  const d=p.data;
@@ -135,11 +141,11 @@ app.post('/customers/:id/update',auth,(req,res)=>{
 });
 
 // Packages
-app.get('/packages',auth,(req,res)=>{
+app.get('/packages',auth,allowRoles('admin','operator'),(req,res)=>{
  const packages=db.prepare('SELECT * FROM packages ORDER BY name').all();
  render(res,'packages','Paket internet',{packages});
 });
-app.post('/packages',auth,(req,res)=>{
+app.post('/packages',auth,allowRoles('admin','operator'),(req,res)=>{
  const p=packageSchema.safeParse(req.body);
  if(!p.success) return res.status(400).send(p.error.issues[0].message);
  const d=p.data;
@@ -150,24 +156,24 @@ app.post('/packages',auth,(req,res)=>{
   res.redirect('/packages');
  }catch{res.status(400).send('Nama paket sudah digunakan atau data tidak valid.');}
 });
-app.post('/packages/:id/archive',auth,(req,res)=>{
+app.post('/packages/:id/archive',auth,allowRoles('admin'),(req,res)=>{
  db.prepare('UPDATE packages SET is_active=0,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(Number(req.params.id));
  audit(req,'package_archived','packages',Number(req.params.id));
  res.redirect('/packages');
 });
 
 // Subscriptions
-app.get('/subscriptions',auth,(req,res)=>{
+app.get('/subscriptions',auth,allowRoles('admin','operator'),(req,res)=>{
  const subscriptions=db.prepare('SELECT s.*,c.name customer_name,c.customer_code,p.name package_name,p.price,p.speed_down,p.speed_up FROM subscriptions s JOIN customers c ON c.id=s.customer_id JOIN packages p ON p.id=s.package_id ORDER BY s.id DESC').all();
  render(res,'subscriptions','Langganan',{subscriptions});
 });
-app.get('/subscriptions/new',auth,(req,res)=>{
+app.get('/subscriptions/new',auth,allowRoles('admin','operator'),(req,res)=>{
  render(res,'subscription-form','Buat langganan',{
   customers:db.prepare("SELECT id,customer_code,name FROM customers WHERE status='active' ORDER BY name").all(),
   packages:db.prepare('SELECT id,name,price,speed_down,speed_up FROM packages WHERE is_active=1 ORDER BY name').all()
  });
 });
-app.post('/subscriptions',auth,(req,res)=>{
+app.post('/subscriptions',auth,allowRoles('admin','operator'),(req,res)=>{
  const p=subscriptionSchema.safeParse(req.body);
  if(!p.success) return res.status(400).send(p.error.issues[0].message);
  const d=p.data;
@@ -178,18 +184,18 @@ app.post('/subscriptions',auth,(req,res)=>{
  audit(req,'subscription_created','subscriptions',Number(r.lastInsertRowid));
  res.redirect('/subscriptions');
 });
-app.post('/subscriptions/:id/end',auth,(req,res)=>{
+app.post('/subscriptions/:id/end',auth,allowRoles('admin','operator'),(req,res)=>{
  db.prepare("UPDATE subscriptions SET status='ended',end_date=date('now','localtime') WHERE id=? AND status='active'").run(Number(req.params.id));
  audit(req,'subscription_ended','subscriptions',Number(req.params.id));
  res.redirect('/subscriptions');
 });
 
 // Invoices & payments
-app.get('/invoices',auth,(req,res)=>{
+app.get('/invoices',auth,allowRoles('admin','operator','finance'),(req,res)=>{
  const invoices=db.prepare('SELECT i.*,c.name customer_name,c.customer_code FROM invoices i JOIN customers c ON c.id=i.customer_id ORDER BY i.id DESC').all();
  render(res,'invoices','Tagihan',{invoices});
 });
-app.post('/invoices/generate',auth,(req,res)=>{
+app.post('/invoices/generate',auth,allowRoles('admin','operator','finance'),(req,res)=>{
  const year=Number(req.body.year),month=Number(req.body.month),due=String(req.body.due_date||'');
  if(!Number.isInteger(year)||year<2020||year>2100||!Number.isInteger(month)||month<1||month>12||!/^\d{4}-\d{2}-\d{2}$/.test(due)) return res.status(400).send('Periode atau jatuh tempo tidak valid.');
  const periodStart=year+'-'+String(month).padStart(2,'0')+'-01';
@@ -207,7 +213,7 @@ app.post('/invoices/generate',auth,(req,res)=>{
  audit(req,'invoices_generated','invoices',null,{year,month,count:rows.length});
  res.redirect('/invoices');
 });
-app.post('/invoices/:id/payments',auth,(req,res)=>{
+app.post('/invoices/:id/payments',auth,allowRoles('admin','operator','finance'),(req,res)=>{
  const amount=Number(req.body.amount),method=String(req.body.method||'cash');
  if(!Number.isSafeInteger(amount)||amount<=0||!['cash','transfer','qris','other'].includes(method)) return res.status(400).send('Pembayaran tidak valid.');
  try{
@@ -322,7 +328,7 @@ app.post('/invoices/:id/payments',auth,(req,res)=>{
  });
 
 // GenieACS (read-only)
-app.get('/genieacs',auth,async(req,res)=>{
+app.get('/genieacs',auth,allowRoles('admin','operator','technician'),async(req,res)=>{
  try{
   const payload=await genieacs.listDevices(100);
   const devices=Array.isArray(payload)?payload:(payload.devices||[]);
