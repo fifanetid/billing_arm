@@ -50,7 +50,18 @@ CREATE INDEX IF NOT EXISTS idx_invoices_status_due ON invoices(status,due_date);
 CREATE INDEX IF NOT EXISTS idx_invoices_period ON invoices(period_year,period_month);
 CREATE INDEX IF NOT EXISTS idx_payments_invoice ON payments(invoice_id);
 CREATE INDEX IF NOT EXISTS idx_subscriptions_status ON subscriptions(status);
-INSERT OR IGNORE INTO schema_migrations(version) VALUES(1);
+CREATE TABLE IF NOT EXISTS expenses(
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ expense_date TEXT NOT NULL,
+ category TEXT NOT NULL,
+ description TEXT NOT NULL,
+ amount INTEGER NOT NULL CHECK(amount>0),
+ recorded_by INTEGER REFERENCES users(id),
+ created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(expense_date);
+
+INSERT OR IGNORE INTO schema_migrations(version) VALUES(1),(2);
 `);
 console.log('SQLite migrations completed.');
 db.close();
