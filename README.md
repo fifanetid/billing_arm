@@ -38,7 +38,7 @@ npm run check
 npm start
 ```
 
-Buka `http://localhost:3000`. Username admin berasal dari `ADMIN_USERNAME`, password dari `ADMIN_PASSWORD`. Jangan gunakan password contoh pada server publik.
+Buka `http://localhost:1000`. Username admin berasal dari `ADMIN_USERNAME`, password dari `ADMIN_PASSWORD`. Jangan gunakan password contoh pada server publik.
 
 ## GenieACS
 Atur `GENIEACS_URL` (biasanya NBI port 7557), `GENIEACS_USERNAME`, dan `GENIEACS_PASSWORD`. Billing menyimpan datanya di SQLite sendiri. Aplikasi ini tidak mengubah MongoDB atau schema internal GenieACS. Integrasi yang ada saat ini hanya membaca daftar perangkat. Pembaruan parameter CPE, task, provisioning, dan reboot belum diaktifkan.
