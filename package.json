@@ -8,9 +8,12 @@
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
     "db:migrate": "node src/db/migrate.js",
-    "seed:admin": "node src/db/seed-admin.js"
+    "seed:admin": "node src/db/seed-admin.js",
+    "check": "node --check src/server.js && node --check src/config.js && node --check src/db/migrate.js && node --check src/db/seed-admin.js && node --check src/services/genieacs.js && node -e \"const fs=require('fs'),ejs=require('ejs');ejs.compile(fs.readFileSync('src/views/page.ejs','utf8'));console.log('EJS template syntax OK')\""
   },
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "better-sqlite3": "^11.8.1",

@@ -10,7 +10,7 @@ async function request(pathname){
  return response.json();
 }
 async function listDevices(limit=100){
- const projection=JSON.stringify({_id:1,_deviceId:1,_lastInform:1});
+ const projection='_id,_deviceId,_lastInform';
  const query=encodeURIComponent('{}');
  return request('/devices/?query='+query+'&projection='+encodeURIComponent(projection)+'&limit='+Math.max(1,Math.min(Number(limit)||100,200)));
 }
